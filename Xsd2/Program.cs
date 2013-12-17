@@ -46,7 +46,7 @@ namespace Xsd2
                         var colonIndex = arg.IndexOf(':');
                         if (colonIndex == -1)
                         {
-                            option = arg;
+                            option = arg.Trim();
                             value = null;
                         }
                         else
