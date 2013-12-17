@@ -53,13 +53,13 @@ namespace Xsd2
                 }
             }
 
-            XmlSchema xsd = XmlSchema.Read(xsdInput, null);            
+            XmlSchema xsd = XmlSchema.Read(xsdInput, null);
             xsds.Add(xsd);
-            
+
             xsds.Compile(null, true);
-            
+
             XmlSchemaImporter schemaImporter = new XmlSchemaImporter(xsds);
-          
+
 
             // create the codedom
             CodeNamespace codeNamespace = new CodeNamespace(Options.OutputNamespace);
@@ -97,8 +97,71 @@ namespace Xsd2
 
             // output the C# code
             CSharpCodeProvider codeProvider = new CSharpCodeProvider();
+            if (CreateMetroApp)
+            {
+                //copy all to a temp structure
+                WriteMetroFile(codeNamespace, codeProvider, output);
+            }
+            else
+            {
+                codeProvider.GenerateCodeFromNamespace(codeNamespace, output, new CodeGeneratorOptions());
+            }
+        }
 
-            codeProvider.GenerateCodeFromNamespace(codeNamespace, output, new CodeGeneratorOptions());
+        private void WriteMetroFile(CodeNamespace codeNamespace, CSharpCodeProvider codeProvider, TextWriter output)
+        {
+            using (var mem = new MemoryStream())
+            {
+                StreamWriter sw = new StreamWriter(mem);
+                codeProvider.GenerateCodeFromNamespace(codeNamespace, sw, new CodeGeneratorOptions());
+                sw.Flush();
+                mem.Flush();
+                //cannot use dispose here, this closes the mem stream as well
+                mem.Position = 0;
+                using (StreamReader sr = new StreamReader(mem))
+                {
+                    while (!sr.EndOfStream)
+                    {
+                        string ln = sr.ReadLine();
+                        Debug.WriteLine(ln);
+                        if (IserializableAttribute(ln))
+                            output.WriteLine("\t[System.Runtime.Serialization.DataContract]");
+                        else
+                            if (!IsUnsupportedMetroAttribute(ln))
+                                WriteToTarget(ln, output);
+                    }
+                }
+            }
+        }
+
+        private void WriteToTarget(string ln, TextWriter output)
+        {
+            if (ln.IndexOf("XmlAttributeAttribute") >= 0)
+            {
+                //some created versions are not supported like
+                //[System.Xml.Serialization.XmlAttributeAttribute(DataType="anyURI", "url")]
+
+                int separator = ln.IndexOf(", ");
+                if (separator >= 0)
+                {
+                    //modify line
+                    int off = ln.IndexOf("(");
+                    string tmpln = ln.Substring(0, off + 1);
+                    tmpln += ln.Substring(separator + 1, ln.Length - separator - 1);
+                    ln = tmpln;
+                }
+            }
+            output.WriteLine(ln);
+        }
+
+        private bool IsUnsupportedMetroAttribute(string ln)
+        {
+            return ln.IndexOf("DesignerCategoryAttribute") >= 0;
+        }
+
+        private bool IserializableAttribute(string ln)
+        {
+            return ln.IndexOf("SerializableAttribute") >= 0;
         }
 
         private void ImportImportedSchema(string schemaFilePath)
@@ -368,6 +431,8 @@ namespace Xsd2
         {
             return p.Substring(0, 1).ToLower() + p.Substring(1) + suffix;
         }
+
+        public bool CreateMetroApp { get; set; }
     }
 
     public class XsdCodeGeneratorOptions
@@ -379,7 +444,7 @@ namespace Xsd2
         public bool UseNullableTypes { get; set; }
         public List<String> Imports { get; set; }
         public List<String> UsingNamespaces { get; set; }
-        
+
         public string OutputNamespace { get; set; }
 
         public bool ExcludeImportedTypes { get; set; }

@@ -110,6 +110,10 @@ namespace Xsd2
                                 options.ExcludeImportedTypes = true;
                                 options.MixedContent = true;
                                 break;
+                            case "/m":
+                            case "/metro":
+                                generator.CreateMetroApp = true;
+                                break;
                         }
                     }
                 }
